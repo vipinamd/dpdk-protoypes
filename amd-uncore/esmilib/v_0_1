@@ -1,0 +1,1234 @@
+diff --git a/app/test/meson.build b/app/test/meson.build
+index 7d909039ae..85eb25f366 100644
+--- a/app/test/meson.build
++++ b/app/test/meson.build
+@@ -142,6 +142,7 @@ source_file_deps = {
+     'test_power.c': ['power'],
+     'test_power_cpufreq.c': ['power'],
+     'test_power_intel_uncore.c': ['power'],
++    'test_power_amd_uncore.c': ['power'],
+     'test_power_kvm_vm.c': ['power'],
+     'test_prefetch.c': [],
+     'test_rand_perf.c': [],
+diff --git a/app/test/test_power_amd_uncore.c b/app/test/test_power_amd_uncore.c
+new file mode 100644
+index 0000000000..f8ab24e7cc
+--- /dev/null
++++ b/app/test/test_power_amd_uncore.c
+@@ -0,0 +1,302 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2024 AMD
++ */
++
++#include "test.h"
++
++#ifndef RTE_LIB_POWER
++
++static int
++test_power_amd_uncore(void)
++{
++	printf("Power management library not supported, skipping test\n");
++	return TEST_SKIPPED;
++}
++
++#else
++#include <rte_power_uncore.h>
++#include <power_common.h>
++
++#define MAX_UNCORE_FREQS 32
++
++#define VALID_PKG 0
++#define VALID_DIE 0
++#define INVALID_PKG (rte_power_uncore_get_num_pkgs() + 1)
++#define INVALID_DIE (rte_power_uncore_get_num_dies(VALID_PKG) + 1)
++#define VALID_INDEX 1
++#define INVALID_INDEX (MAX_UNCORE_FREQS + 1)
++
++static int check_power_uncore_init(void)
++{
++	int ret;
++
++	/* Test initialisation of uncore configuration*/
++	ret = rte_power_uncore_init(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Cannot initialise uncore power management for pkg %u die %u, this "
++			"may occur if environment is not configured "
++			"correctly(APCI cpufreq) or operating in another valid "
++			"Power management environment\n", VALID_PKG, VALID_DIE);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_uncore_init(INVALID_PKG, INVALID_DIE);
++	if (ret == 0) {
++		printf("Unexpectedly was able to initialise uncore power management "
++			"for pkg %u die %u\n", INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_get_uncore_freq(void)
++{
++	int ret;
++
++	/* Successfully get uncore freq */
++	ret = rte_power_get_uncore_freq(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Failed to get uncore frequency for pkg %u die %u\n",
++							VALID_PKG, VALID_DIE);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_get_uncore_freq(INVALID_PKG, INVALID_DIE);
++	if (ret >= 0) {
++		printf("Unexpectedly got invalid uncore frequency for pkg %u die %u\n",
++							INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_set_uncore_freq(void)
++{
++	int ret;
++
++	/* Successfully set uncore freq */
++	ret = rte_power_set_uncore_freq(VALID_PKG, VALID_DIE, VALID_INDEX);
++	if (ret < 0) {
++		printf("Failed to set uncore frequency for pkg %u die %u index %u\n",
++							VALID_PKG, VALID_DIE, VALID_INDEX);
++		return -1;
++	}
++
++	/* Try to unsuccessfully set invalid uncore freq index */
++	ret = rte_power_set_uncore_freq(VALID_PKG, VALID_DIE, INVALID_INDEX);
++	if (ret == 0) {
++		printf("Unexpectedly set invalid uncore index for pkg %u die %u index %u\n",
++							VALID_PKG, VALID_DIE, INVALID_INDEX);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_set_uncore_freq(INVALID_PKG, INVALID_DIE, VALID_INDEX);
++	if (ret == 0) {
++		printf("Unexpectedly set invalid uncore frequency for pkg %u die %u index %u\n",
++							INVALID_PKG, INVALID_DIE, VALID_INDEX);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_freq_max(void)
++{
++	int ret;
++
++	/* Successfully get max uncore freq */
++	ret = rte_power_uncore_freq_max(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Failed to set max uncore frequency for pkg %u die %u\n",
++							VALID_PKG, VALID_DIE);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_uncore_freq_max(INVALID_PKG, INVALID_DIE);
++	if (ret == 0) {
++		printf("Unexpectedly set invalid max uncore frequency for pkg %u die %u\n",
++							INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_freq_min(void)
++{
++	int ret;
++
++	/* Successfully get min uncore freq */
++	ret = rte_power_uncore_freq_min(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Failed to set min uncore frequency for pkg %u die %u\n",
++							VALID_PKG, VALID_DIE);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_uncore_freq_min(INVALID_PKG, INVALID_DIE);
++	if (ret == 0) {
++		printf("Unexpectedly set invalid min uncore frequency for pkg %u die %u\n",
++							INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_get_num_freqs(void)
++{
++	int ret;
++
++	/* Successfully get number of uncore freq */
++	ret = rte_power_uncore_get_num_freqs(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Failed to get number of uncore frequencies for pkg %u die %u\n",
++							VALID_PKG, VALID_DIE);
++		return -1;
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_uncore_get_num_freqs(INVALID_PKG, INVALID_DIE);
++	if (ret >= 0) {
++		printf("Unexpectedly got number of invalid frequencies for pkg %u die %u\n",
++							INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_get_num_pkgs(void)
++{
++	int ret;
++
++	/* Successfully get number of uncore pkgs */
++	ret = rte_power_uncore_get_num_pkgs();
++	if (ret == 0) {
++		printf("Failed to get number of uncore pkgs\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_get_num_dies(void)
++{
++	int ret;
++
++	/* Successfully get number of uncore dies */
++	ret = rte_power_uncore_get_num_dies(VALID_PKG);
++	if (ret == 0) {
++		printf("Failed to get number of uncore dies for pkg %u\n",
++							VALID_PKG);
++		return -1;
++	}
++
++	/* Unsuccessful test */
++	ret = rte_power_uncore_get_num_dies(INVALID_PKG);
++	if (ret > 0) {
++		printf("Unexpectedly got number of invalid dies for pkg %u\n",
++							INVALID_PKG);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++check_power_uncore_exit(void)
++{
++	int ret;
++
++	/* Successfully exit uncore power management */
++	ret = rte_power_uncore_exit(VALID_PKG, VALID_DIE);
++	if (ret < 0) {
++		printf("Failed to exit uncore power management for pkg %u die %u\n",
++							VALID_PKG, VALID_DIE);
++	}
++
++	/* Unsuccessful Test */
++	ret = rte_power_uncore_exit(INVALID_PKG, INVALID_DIE);
++	if (ret == 0) {
++		printf("Unexpectedly was able to exit uncore power management for pkg %u die %u\n",
++							INVALID_PKG, INVALID_DIE);
++		return -1;
++	}
++
++	return 0;
++}
++
++static int
++test_power_amd_uncore(void)
++{
++	int ret;
++
++	ret = rte_power_set_uncore_env(RTE_UNCORE_PM_ENV_AMD_HSMP);
++	if (ret < 0)
++		goto fail_all;
++
++	ret = rte_power_uncore_get_num_pkgs();
++	if (ret < 0) {
++		return TEST_SKIPPED;
++	}
++
++	ret = check_power_uncore_init();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_get_uncore_freq();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_set_uncore_freq();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_freq_max();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_freq_min();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_get_num_freqs();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_get_num_pkgs();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_get_num_dies();
++	if (ret < 0)
++		goto fail_all;
++
++	ret = check_power_uncore_exit();
++	if (ret < 0)
++		return -1;
++
++	return 0;
++
++fail_all:
++	rte_power_uncore_exit(VALID_PKG, VALID_DIE);
++	return -1;
++}
++#endif
++
++REGISTER_FAST_TEST(power_amd_uncore_autotest, true, true, test_power_amd_uncore);
+diff --git a/config/meson.build b/config/meson.build
+index 8c8b019c25..904c386fb8 100644
+--- a/config/meson.build
++++ b/config/meson.build
+@@ -291,6 +291,25 @@ if pcap_dep.found() and cc.has_header('pcap.h', dependencies: pcap_dep)
+     dpdk_extra_ldflags += '-l@0@'.format(pcap_lib)
+ endif
+ 
++# check if build env has AMD uncore library
++amd_uncore_dep = dependency('libesmi_64', required: false, method: 'pkg-config')
++amd_uncore_lib = 'e_smi64'
++
++if amd_uncore_dep.found()
++  dpdk_conf.set('RTE_HAS_LIBAMDUNCORE', 1)
++  dpdk_extra_ldflags += '-le_smi64'
++endif
++
++if not amd_uncore_dep.found()
++  amd_uncore_dep = cc.find_library (amd_uncore_lib, required: false, dirs: '/opt/e-sms/e_smi/lib/')
++
++  if amd_uncore_dep.found()
++    dpdk_conf.set('RTE_HAS_LIBAMDUNCORE', 2)
++    dpdk_extra_ldflags += '-le_smi64'
++  endif
++
++endif
++
+ # for clang 32-bit compiles we need libatomic for 64-bit atomic ops
+ if cc.get_id() == 'clang' and dpdk_conf.get('RTE_ARCH_64') == false
+     atomic_dep = cc.find_library('atomic', required: true)
+diff --git a/doc/guides/prog_guide/power_man.rst b/doc/guides/prog_guide/power_man.rst
+index f6674efe2d..3d9b6ba527 100644
+--- a/doc/guides/prog_guide/power_man.rst
++++ b/doc/guides/prog_guide/power_man.rst
+@@ -249,6 +249,57 @@ Get Num Pkgs
+ Get Num Dies
+   Get the number of die's on a given package.
+ 
++AMD Uncore API
++--------------
++
++Abstract
++~~~~~~~~
++
++Uncore is a term used by AMD to describe the functions of EPYC SoC
++that are not in the core, but which must be closely connected to the core
++to achieve high performance: GMI interconnect to compute chiplet, L3 cache,
++on-die memory controller, XGMI PCIe interconnect etc.
++Determinsitic performance & power savings can be achieved by altering the default
++settings of uncore.
++
++API Overview for AMD Uncore
++~~~~~~~~~~~~~~~~~~~~~~~~~~~
++
++Overview of each function in the AMD Uncore API,
++with explanation of what they do.
++Each function should not be called in the fast path.
++
++Uncore Init
++  Initialize uncore module of the AMD EPYC SoC for power, frequency, link width
++  per socket to each Compute Complex.
++
++Uncore Power Exit
++  Exit uncore module for the SoC.
++
++Get Uncore Power Freq
++  Get current uncore freq index for die on pkg.
++
++Set Uncore Power Freq
++  Set min & max uncore freq index for die on pkg
++  to specified index value (min and max will be the same).
++
++Uncore Power Max
++  Set min & max uncore freq to maximum frequency index for die on pkg
++  (min and max will be the same).
++
++Uncore Power Min
++  Set min & max uncore freq to minimum frequency index for die on pkg
++  (min and max will be the same).
++
++Get Num Freqs
++  Get the number of frequencies in the index array.
++
++Get Num Pkgs
++  Get the number of packages (CPU's) on the system.
++
++Get Num Dies
++  Get the number of die's on a given package.
++
+ References
+ ----------
+ 
+diff --git a/lib/power/meson.build b/lib/power/meson.build
+index b8426589b2..622a2ab16f 100644
+--- a/lib/power/meson.build
++++ b/lib/power/meson.build
+@@ -11,6 +11,7 @@ if not is_linux
+     build = false
+     reason = 'only supported on Linux'
+ endif
++
+ sources = files(
+         'guest_channel.c',
+         'power_acpi_cpufreq.c',
+@@ -24,12 +25,32 @@ sources = files(
+         'rte_power_uncore.c',
+         'rte_power_pmd_mgmt.c',
+ )
++
+ headers = files(
+         'rte_power.h',
+         'rte_power_guest_channel.h',
+         'rte_power_pmd_mgmt.h',
+         'rte_power_uncore.h',
+ )
++
++if dpdk_conf.get('RTE_HAS_LIBAMDUNCORE') == 1 
++  if cc.has_header('e_smi/e_smi.h', dependencies:amd_uncore_dep)
++      sources += files('power_amd_uncore.c')
++      cflags += '-I/opt/e-sms/e_smi/include/'
++      dpdk_extra_ldflags += '-le_smi64'
++      ext_deps += declare_dependency (link_args: ['-le_smi64'])
++   endif
++
++endif
++
++if dpdk_conf.get('RTE_HAS_LIBAMDUNCORE') == 2
++    if cc.has_header('e_smi/e_smi.h', dependencies:amd_uncore_dep, include_directories: include_directories('/opt/e-sms/e_smi/include/'))
++      sources += files('power_amd_uncore.c')
++      cflags += '-I/opt/e-sms/e_smi/include/'
++      ext_deps += declare_dependency (link_args: ['/opt/e-sms/e_smi//lib/libe_smi64.so'])
++    endif
++endif
++
+ if cc.has_argument('-Wno-cast-qual')
+     cflags += '-Wno-cast-qual'
+ endif
+diff --git a/lib/power/power_amd_uncore.c b/lib/power/power_amd_uncore.c
+new file mode 100644
+index 0000000000..1856ac355e
+--- /dev/null
++++ b/lib/power/power_amd_uncore.c
+@@ -0,0 +1,415 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2024 AMD 
++ */
++
++#include <errno.h>
++#include <dirent.h>
++#include <fnmatch.h>
++#include <inttypes.h>
++
++#include <e_smi/e_smi.h>
++//#include <e_smi/e_smi_monitor.h>
++
++#include <rte_memcpy.h>
++
++#include "power_amd_uncore.h"
++#include "power_common.h"
++
++#define MAX_UNCORE_FREQS 32
++#define MAX_NUMA_DIE 8
++#define BUS_FREQ     100000
++#define FILTER_LENGTH 18
++#define PACKAGE_FILTER "package_%02u_die_*"
++#define DIE_FILTER "package_%02u_die_%02u"
++#define INTEL_UNCORE_FREQUENCY_DIR "/sys/devices/system/cpu/intel_uncore_frequency"
++#define POWER_GOVERNOR_PERF "performance"
++#define POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ \
++		"/sys/devices/system/cpu/intel_uncore_frequency/package_%02u_die_%02u/max_freq_khz"
++#define POWER_INTEL_UNCORE_SYSFILE_MIN_FREQ  \
++		"/sys/devices/system/cpu/intel_uncore_frequency/package_%02u_die_%02u/min_freq_khz"
++#define POWER_INTEL_UNCORE_SYSFILE_BASE_MAX_FREQ \
++		"/sys/devices/system/cpu/intel_uncore_frequency/package_%02u_die_%02u/initial_max_freq_khz"
++#define POWER_INTEL_UNCORE_SYSFILE_BASE_MIN_FREQ  \
++		"/sys/devices/system/cpu/intel_uncore_frequency/package_%02u_die_%02u/initial_min_freq_khz"
++
++
++struct __rte_cache_aligned uncore_power_info {
++	unsigned int die;                  /* Core die id */
++	unsigned int pkg;                  /* Package id */
++	uint32_t freqs[MAX_UNCORE_FREQS];  /* Frequency array */
++	uint32_t nb_freqs;                 /* Number of available freqs */
++	FILE *f_cur_min;                   /* FD of scaling_min */
++	FILE *f_cur_max;                   /* FD of scaling_max */
++	uint32_t curr_idx;                 /* Freq index in freqs array */
++	uint32_t org_min_freq;             /* Original min freq of uncore */
++	uint32_t org_max_freq;             /* Original max freq of uncore */
++	uint32_t init_max_freq;            /* System max uncore freq */
++	uint32_t init_min_freq;            /* System min uncore freq */
++};
++
++static struct uncore_power_info uncore_info[RTE_MAX_NUMA_NODES][MAX_NUMA_DIE];
++
++static int
++set_uncore_freq_internal(struct uncore_power_info *ui, uint32_t idx)
++{
++	uint32_t target_uncore_freq, curr_max_freq;
++	int ret;
++
++	if (idx >= MAX_UNCORE_FREQS || idx >= ui->nb_freqs) {
++		POWER_LOG(DEBUG, "Invalid uncore frequency index %u, which "
++				"should be less than %u", idx, ui->nb_freqs);
++		return -1;
++	}
++
++	target_uncore_freq = ui->freqs[idx];
++
++	/* check current max freq, so that the value to be flushed first
++	 * can be accurately recorded
++	 */
++	open_core_sysfs_file(&ui->f_cur_max, "rw+", POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ,
++			ui->pkg, ui->die);
++	if (ui->f_cur_max == NULL) {
++		POWER_LOG(DEBUG, "failed to open %s",
++				POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ);
++		return -1;
++	}
++	ret = read_core_sysfs_u32(ui->f_cur_max, &curr_max_freq);
++	if (ret < 0) {
++		POWER_LOG(DEBUG, "Failed to read %s",
++				POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ);
++		fclose(ui->f_cur_max);
++		return -1;
++	}
++
++	/* check this value first before fprintf value to f_cur_max, so value isn't overwritten */
++	if (fprintf(ui->f_cur_min, "%u", target_uncore_freq) < 0) {
++		POWER_LOG(ERR, "Fail to write new uncore frequency for "
++				"pkg %02u die %02u", ui->pkg, ui->die);
++		return -1;
++	}
++
++	if (fprintf(ui->f_cur_max, "%u", target_uncore_freq) < 0) {
++		POWER_LOG(ERR, "Fail to write new uncore frequency for "
++				"pkg %02u die %02u", ui->pkg, ui->die);
++		return -1;
++	}
++
++	POWER_DEBUG_LOG("Uncore frequency '%u' to be set for pkg %02u die %02u",
++				target_uncore_freq, ui->pkg, ui->die);
++
++	/* write the minimum value first if the target freq is less than current max */
++	if (target_uncore_freq <= curr_max_freq) {
++		fflush(ui->f_cur_min);
++		fflush(ui->f_cur_max);
++	} else {
++		fflush(ui->f_cur_max);
++		fflush(ui->f_cur_min);
++	}
++	ui->curr_idx = idx;
++
++	return 0;
++}
++
++/*
++ * Fopen the sys file for the future setting of the uncore die frequency.
++ */
++static int
++power_init_for_setting_uncore_freq(struct uncore_power_info *ui)
++{
++	FILE *f_base_min = NULL, *f_base_max = NULL, *f_min = NULL, *f_max = NULL;
++	uint32_t base_min_freq = 0, base_max_freq = 0, min_freq = 0, max_freq = 0;
++	int ret;
++
++	/* open and read all uncore sys files */
++	/* Base max */
++	open_core_sysfs_file(&f_base_max, "r", POWER_INTEL_UNCORE_SYSFILE_BASE_MAX_FREQ,
++			ui->pkg, ui->die);
++	if (f_base_max == NULL) {
++		POWER_LOG(DEBUG, "failed to open %s",
++				POWER_INTEL_UNCORE_SYSFILE_BASE_MAX_FREQ);
++		goto err;
++	}
++	ret = read_core_sysfs_u32(f_base_max, &base_max_freq);
++	if (ret < 0) {
++		POWER_LOG(DEBUG, "Failed to read %s",
++				POWER_INTEL_UNCORE_SYSFILE_BASE_MAX_FREQ);
++		goto err;
++	}
++
++	/* Base min */
++	open_core_sysfs_file(&f_base_min, "r", POWER_INTEL_UNCORE_SYSFILE_BASE_MIN_FREQ,
++		ui->pkg, ui->die);
++	if (f_base_min == NULL) {
++		POWER_LOG(DEBUG, "failed to open %s",
++				POWER_INTEL_UNCORE_SYSFILE_BASE_MIN_FREQ);
++		goto err;
++	}
++	if (f_base_min != NULL) {
++		ret = read_core_sysfs_u32(f_base_min, &base_min_freq);
++		if (ret < 0) {
++			POWER_LOG(DEBUG, "Failed to read %s",
++					POWER_INTEL_UNCORE_SYSFILE_BASE_MIN_FREQ);
++			goto err;
++		}
++	}
++
++	/* Curr min */
++	open_core_sysfs_file(&f_min, "rw+", POWER_INTEL_UNCORE_SYSFILE_MIN_FREQ,
++			ui->pkg, ui->die);
++	if (f_min == NULL) {
++		POWER_LOG(DEBUG, "failed to open %s",
++				POWER_INTEL_UNCORE_SYSFILE_MIN_FREQ);
++		goto err;
++	}
++	if (f_min != NULL) {
++		ret = read_core_sysfs_u32(f_min, &min_freq);
++		if (ret < 0) {
++			POWER_LOG(DEBUG, "Failed to read %s",
++					POWER_INTEL_UNCORE_SYSFILE_MIN_FREQ);
++			goto err;
++		}
++	}
++
++	/* Curr max */
++	open_core_sysfs_file(&f_max, "rw+", POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ,
++			ui->pkg, ui->die);
++	if (f_max == NULL) {
++		POWER_LOG(DEBUG, "failed to open %s",
++				POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ);
++		goto err;
++	}
++	if (f_max != NULL) {
++		ret = read_core_sysfs_u32(f_max, &max_freq);
++		if (ret < 0) {
++			POWER_LOG(DEBUG, "Failed to read %s",
++					POWER_INTEL_UNCORE_SYSFILE_MAX_FREQ);
++			goto err;
++		}
++	}
++
++	/* assign file handles */
++	ui->f_cur_min = f_min;
++	ui->f_cur_max = f_max;
++	/* save current min + max freq's so that they can be restored on exit */
++	ui->org_min_freq = min_freq;
++	ui->org_max_freq = max_freq;
++	ui->init_max_freq = base_max_freq;
++	ui->init_min_freq = base_min_freq;
++
++	fclose(f_base_min);
++	fclose(f_base_max);
++	/* f_min and f_max are stored, no need to close */
++
++	return 0;
++
++err:
++	if (f_base_min != NULL)
++		fclose(f_base_min);
++	if (f_base_max != NULL)
++		fclose(f_base_max);
++	if (f_min != NULL)
++		fclose(f_min);
++	if (f_max != NULL)
++		fclose(f_max);
++	return -1;
++}
++
++/*
++ * Get the available uncore frequencies of the specific die by reading the
++ * sys file.
++ */
++static int
++power_get_available_uncore_freqs(struct uncore_power_info *ui)
++{
++	int ret = -1;
++	uint32_t i, num_uncore_freqs = 0;
++
++	num_uncore_freqs = (ui->init_max_freq - ui->init_min_freq) / BUS_FREQ + 1;
++	if (num_uncore_freqs >= MAX_UNCORE_FREQS) {
++		POWER_LOG(ERR, "Too many available uncore frequencies: %d",
++				num_uncore_freqs);
++		goto out;
++	}
++
++	/* Generate the uncore freq bucket array. */
++	for (i = 0; i < num_uncore_freqs; i++)
++		ui->freqs[i] = ui->init_max_freq - (i) * BUS_FREQ;
++
++	ui->nb_freqs = num_uncore_freqs;
++
++	ret = 0;
++
++	POWER_DEBUG_LOG("%d frequency(s) of pkg %02u die %02u are available",
++			num_uncore_freqs, ui->pkg, ui->die);
++
++out:
++	return ret;
++}
++
++static int
++check_pkg_die_values(unsigned int pkg, unsigned int die)
++{
++	unsigned int max_pkgs, max_dies;
++	max_pkgs = power_amd_uncore_get_num_pkgs();
++	if (max_pkgs == 0)
++		return -1;
++	if (pkg >= max_pkgs) {
++		POWER_LOG(DEBUG, "Package number %02u can not exceed %u",
++				pkg, max_pkgs);
++		return -1;
++	}
++
++	max_dies = power_amd_uncore_get_num_dies(pkg);
++	if (max_dies == 0)
++		return -1;
++	if (die >= max_dies) {
++		POWER_LOG(DEBUG, "Die number %02u can not exceed %u",
++				die, max_dies);
++		return -1;
++	}
++
++	return 0;
++}
++
++int
++power_amd_uncore_init(unsigned int pkg, unsigned int die)
++{
++	int ret =  esmi_init();
++	/* Init for setting uncore die frequency */
++	if (ESMI_SUCCESS != ret) {
++		POWER_LOG(DEBUG, "Cannot init for setting uncore frequency for "
++				"pkg %02u die %02u; reason '%s'", pkg, die, esmi_get_err_msg (ret));
++		return -1;
++	}
++
++	return 0;
++}
++
++int
++power_amd_uncore_exit(unsigned int pkg, unsigned int die)
++{
++	esmi_exit();
++
++	return 0;
++}
++
++uint32_t
++power_get_amd_uncore_freq(unsigned int pkg, unsigned int die)
++{
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	return uncore_info[pkg][die].curr_idx;
++}
++
++int
++power_set_amd_uncore_freq(unsigned int pkg, unsigned int die, uint32_t index)
++{
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	return set_uncore_freq_internal(&(uncore_info[pkg][die]), index);
++}
++
++int
++power_amd_uncore_freq_max(unsigned int pkg, unsigned int die)
++{
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	return set_uncore_freq_internal(&(uncore_info[pkg][die]), 0);
++}
++
++
++int
++power_amd_uncore_freq_min(unsigned int pkg, unsigned int die)
++{
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	struct uncore_power_info *ui = &uncore_info[pkg][die];
++
++	return set_uncore_freq_internal(&(uncore_info[pkg][die]), ui->nb_freqs - 1);
++}
++
++int
++power_amd_uncore_freqs(unsigned int pkg, unsigned int die, uint32_t *freqs, uint32_t num)
++{
++	struct uncore_power_info *ui;
++
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	if (freqs == NULL) {
++		POWER_LOG(ERR, "NULL buffer supplied");
++		return 0;
++	}
++
++	ui = &uncore_info[pkg][die];
++	if (num < ui->nb_freqs) {
++		POWER_LOG(ERR, "Buffer size is not enough");
++		return 0;
++	}
++	rte_memcpy(freqs, ui->freqs, ui->nb_freqs * sizeof(uint32_t));
++
++	return ui->nb_freqs;
++}
++
++int
++power_amd_uncore_get_num_freqs(unsigned int pkg, unsigned int die)
++{
++	int ret = check_pkg_die_values(pkg, die);
++	if (ret < 0)
++		return -1;
++
++	return uncore_info[pkg][die].nb_freqs;
++}
++
++unsigned int
++power_amd_uncore_get_num_pkgs(void)
++{
++	return 0;
++}
++
++unsigned int
++power_amd_uncore_get_num_dies(unsigned int pkg)
++{
++	DIR *d;
++	struct dirent *dir;
++	unsigned int count = 0, max_pkgs;
++	char filter[FILTER_LENGTH];
++
++	max_pkgs = power_amd_uncore_get_num_pkgs();
++	if (max_pkgs == 0)
++		return 0;
++	if (pkg >= max_pkgs) {
++		POWER_LOG(DEBUG, "Invalid package number");
++		return 0;
++	}
++
++	d = opendir(INTEL_UNCORE_FREQUENCY_DIR);
++	if (d == NULL) {
++		POWER_LOG(ERR,
++		"Uncore frequency management not supported/enabled on this kernel. "
++		"Please enable CONFIG_INTEL_UNCORE_FREQ_CONTROL if on Intel x86 with linux kernel"
++		" >= 5.6");
++		return 0;
++	}
++
++	/* search by incrementing file name for max die file value */
++	while ((dir = readdir(d)) != NULL) {
++		snprintf(filter, FILTER_LENGTH, DIE_FILTER, pkg, count);
++		/* make sure filter string is in file name (don't include hidden files) */
++		if (fnmatch(filter, dir->d_name, 0) == 0)
++			count++;
++	}
++
++	closedir(d);
++
++	return count;
++}
+diff --git a/lib/power/power_amd_uncore.h b/lib/power/power_amd_uncore.h
+new file mode 100644
+index 0000000000..be69379fb3
+--- /dev/null
++++ b/lib/power/power_amd_uncore.h
+@@ -0,0 +1,226 @@
++/* SPDX-License-Identifier: BSD-3-Clause
++ * Copyright(c) 2024 Intel Corporation
++ */
++
++#ifndef POWER_AMD_UNCORE_H
++#define POWER_AMD_UNCORE_H
++
++/**
++ * @file
++ * RTE Intel Uncore Frequency Management
++ */
++
++#include "rte_power.h"
++#include "rte_power_uncore.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * Initialize uncore frequency management for specific die on a package.
++ * It will get the available frequencies and prepare to set new die frequencies.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  - 0 on success.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_init(unsigned int pkg, unsigned int die);
++
++/**
++ * Exit uncore frequency management on a specific die on a package.
++ * It will restore uncore min and* max values to previous values
++ * before initialization of API.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  - 0 on success.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_exit(unsigned int pkg, unsigned int die);
++
++/**
++ * Return the current index of available frequencies of a specific die on a package.
++ * It should be protected outside of this function for threadsafe.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  The current index of available frequencies.
++ *  If error, it will return 'RTE_POWER_INVALID_FREQ_INDEX = (~0)'.
++ */
++uint32_t
++power_get_amd_uncore_freq(unsigned int pkg, unsigned int die);
++
++/**
++ * Set minimum and maximum uncore frequency for specified die on a package
++ * to specified index value.
++ * It should be protected outside of this function for threadsafe.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ * @param index
++ *  The index of available frequencies.
++ *
++ * @return
++ *  - 1 on success with frequency changed.
++ *  - 0 on success without frequency changed.
++ *  - Negative on error.
++ */
++int
++power_set_amd_uncore_freq(unsigned int pkg, unsigned int die, uint32_t index);
++
++/**
++ * Set minimum and maximum uncore frequency for specified die on a package
++ * to maximum value according to the available frequencies.
++ * It should be protected outside of this function for threadsafe.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  - 1 on success with frequency changed.
++ *  - 0 on success without frequency changed.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_freq_max(unsigned int pkg, unsigned int die);
++
++/**
++ * Set minimum and maximum uncore frequency for specified die on a package
++ * to minimum value according to the available frequencies.
++ * It should be protected outside of this function for threadsafe.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  - 1 on success with frequency changed.
++ *  - 0 on success without frequency changed.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_freq_min(unsigned int pkg, unsigned int die);
++
++/**
++ * Return the list of available frequencies in the index array.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ * @param freqs
++ *  The buffer array to save the frequencies.
++ * @param num
++ *  The number of frequencies to get.
++ *
++ * @return
++ *  - The number of available index's in frequency array.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_freqs(unsigned int pkg, unsigned int die,
++		unsigned int *freqs, unsigned int num);
++
++/**
++ * Return the list length of available frequencies in the index array.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ * @param die
++ *  Die number.
++ *  Each package can have several dies connected together via the uncore mesh.
++ *
++ * @return
++ *  - The number of available index's in frequency array.
++ *  - Negative on error.
++ */
++int
++power_amd_uncore_get_num_freqs(unsigned int pkg, unsigned int die);
++
++/**
++ * Return the number of packages (CPUs) on a system
++ * by parsing the uncore sysfs directory.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @return
++ *  - Zero on error.
++ *  - Number of package on system on success.
++ */
++unsigned int
++power_amd_uncore_get_num_pkgs(void);
++
++/**
++ * Return the number of dies for pakckages (CPUs) specified
++ * from parsing the uncore sysfs directory.
++ *
++ * This function should NOT be called in the fast path.
++ *
++ * @param pkg
++ *  Package number.
++ *  Each physical CPU in a system is referred to as a package.
++ *
++ * @return
++ *  - Zero on error.
++ *  - Number of dies for package on sucecss.
++ */
++unsigned int
++power_amd_uncore_get_num_dies(unsigned int pkg);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* POWER_INTEL_UNCORE_H */
+diff --git a/lib/power/rte_power_uncore.c b/lib/power/rte_power_uncore.c
+index 48c75a5da0..cbb5bacdf3 100644
+--- a/lib/power/rte_power_uncore.c
++++ b/lib/power/rte_power_uncore.c
+@@ -5,12 +5,20 @@
+ 
+ #include <errno.h>
+ 
++#include <cpuid.h>
++
+ #include <rte_errno.h>
+ #include <rte_spinlock.h>
+ 
+ #include "power_common.h"
+ #include "rte_power_uncore.h"
+ #include "power_intel_uncore.h"
++#include "power_amd_uncore.h"
++
++#define x86_vendor_amd(t1, t2, t3)        \
++        ((t1 == 0x68747541) && /* htuA */   \
++         (t2 == 0x444d4163) && /* DMAc */   \
++         (t3 == 0x69746e65))   /* itne */
+ 
+ enum rte_uncore_power_mgmt_env default_uncore_env = RTE_UNCORE_PM_ENV_NOT_SET;
+ 
+@@ -96,6 +104,12 @@ reset_power_uncore_function_ptrs(void)
+ int
+ rte_power_set_uncore_env(enum rte_uncore_power_mgmt_env env)
+ {
++	/* 
++	 * use CPUID to get vendor_id
++	 */
++	uint32_t a, b, c, d;
++	__cpuid(0, a, b, c, d);
++	bool is_amd_uncore = x86_vendor_amd(b, c, d);
+ 	int ret;
+ 
+ 	rte_spinlock_lock(&global_env_cfg_lock);
+@@ -106,15 +120,29 @@ rte_power_set_uncore_env(enum rte_uncore_power_mgmt_env env)
+ 		return -1;
+ 	}
+ 
+-	if (env == RTE_UNCORE_PM_ENV_AUTO_DETECT)
+-		/* Currently only intel_uncore is supported.
++	if (env == RTE_UNCORE_PM_ENV_AUTO_DETECT) {
++		/* Currently only x86 uncore is supported.
+ 		 * This will be extended with auto-detection support
+ 		 * for multiple uncore implementations.
+ 		 */
+-		env = RTE_UNCORE_PM_ENV_INTEL_UNCORE;
++		env = (is_amd_uncore) ? RTE_UNCORE_PM_ENV_AMD_HSMP : RTE_UNCORE_PM_ENV_INTEL_UNCORE;
++	}
+ 
+ 	ret = 0;
++	if ((env == RTE_UNCORE_PM_ENV_INTEL_UNCORE) && (env == RTE_UNCORE_PM_ENV_AMD_HSMP)
++			) {
++		POWER_LOG(ERR, "Invalid Power Management Environment(%d) set", env);
++		ret = -1;
++		goto out;
++	}
++
+ 	if (env == RTE_UNCORE_PM_ENV_INTEL_UNCORE) {
++		if (is_amd_uncore) {
++			POWER_LOG(ERR, "Invalid Power Management Environment(%d) set for the AMD platform!", env);
++			ret = -1;
++			goto out;
++		}
++
+ 		rte_power_get_uncore_freq = power_get_intel_uncore_freq;
+ 		rte_power_set_uncore_freq = power_set_intel_uncore_freq;
+ 		rte_power_uncore_freq_min  = power_intel_uncore_freq_min;
+@@ -123,11 +151,25 @@ rte_power_set_uncore_env(enum rte_uncore_power_mgmt_env env)
+ 		rte_power_uncore_get_num_freqs = power_intel_uncore_get_num_freqs;
+ 		rte_power_uncore_get_num_pkgs = power_intel_uncore_get_num_pkgs;
+ 		rte_power_uncore_get_num_dies = power_intel_uncore_get_num_dies;
+-	} else {
+-		POWER_LOG(ERR, "Invalid Power Management Environment(%d) set", env);
+-		ret = -1;
+-		goto out;
+ 	}
++#ifdef RTE_HAS_LIBAMDUNCORE
++	else if (env == RTE_UNCORE_PM_ENV_AMD_HSMP) {
++		if (false == is_amd_uncore) {
++			POWER_LOG(ERR, "Invalid Power Management Environment(%d) set for the INTEL platform!", env);
++			ret = -1;
++			goto out;
++		}
++
++		rte_power_get_uncore_freq = power_get_amd_uncore_freq;
++		rte_power_set_uncore_freq = power_set_amd_uncore_freq;
++		rte_power_uncore_freq_min  = power_amd_uncore_freq_min;
++		rte_power_uncore_freq_max  = power_amd_uncore_freq_max;
++		rte_power_uncore_freqs = power_amd_uncore_freqs;
++		rte_power_uncore_get_num_freqs = power_amd_uncore_get_num_freqs;
++		rte_power_uncore_get_num_pkgs = power_amd_uncore_get_num_pkgs;
++		rte_power_uncore_get_num_dies = power_amd_uncore_get_num_dies;
++	}
++#endif
+ 
+ 	default_uncore_env = env;
+ out:
+@@ -158,6 +200,11 @@ rte_power_uncore_init(unsigned int pkg, unsigned int die)
+ 	switch (default_uncore_env) {
+ 	case RTE_UNCORE_PM_ENV_INTEL_UNCORE:
+ 		return power_intel_uncore_init(pkg, die);
++#ifdef RTE_HAS_LIBAMDUNCORE
++	case RTE_UNCORE_PM_ENV_AMD_HSMP:
++		return power_amd_uncore_init(pkg, die);
++#endif
++
+ 	default:
+ 		POWER_LOG(INFO, "Uncore Env isn't set yet!");
+ 		break;
+@@ -186,6 +233,10 @@ rte_power_uncore_exit(unsigned int pkg, unsigned int die)
+ 	switch (default_uncore_env) {
+ 	case RTE_UNCORE_PM_ENV_INTEL_UNCORE:
+ 		return power_intel_uncore_exit(pkg, die);
++#ifdef RTE_HAS_LIBAMDUNCORE
++	case RTE_UNCORE_PM_ENV_AMD_HSMP:
++		return power_amd_uncore_exit(pkg, die);
++#endif
+ 	default:
+ 		POWER_LOG(ERR, "Uncore Env has not been set, unable to exit gracefully");
+ 		break;
