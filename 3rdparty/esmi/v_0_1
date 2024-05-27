@@ -1,0 +1,59 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b80bd71..7083aec 100755
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -205,6 +205,21 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/ESMI_IB_Release_Notes.pdf
+ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/RELEASENOTES.md
+ 			DESTINATION ${E_SMI}/doc/)
+ 
++# build pkg
++configure_file(
++        ${CMAKE_CURRENT_SOURCE_DIR}/share/pkgconfig/${PROJECT_NAME}.pc.in
++        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.pc
++        @ONLY
++)
++configure_file(
++        ${CMAKE_CURRENT_SOURCE_DIR}/share/pkgconfig/${PROJECT_NAME}-libs.pc.in
++        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-libs.pc
++        @ONLY
++)
++
++install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.pc DESTINATION ${CMAKE_INSTALL_PREFIX}/pkgconfig)
++install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-libs.pc DESTINATION ${CMAKE_INSTALL_PREFIX}/pkgconfig)
++
+ # General package specific variables
+ set(CPACK_GENERATOR "DEB;RPM"  CACHE STRING "Default packaging generators.")
+ set(CPACK_PACKAGE_NAME ${E_SMI_PACKAGE})
+diff --git a/share/pkgconfig/e_smi64-libs.pc.in b/share/pkgconfig/e_smi64-libs.pc.in
+new file mode 100644
+index 0000000..0331c95
+--- /dev/null
++++ b/share/pkgconfig/e_smi64-libs.pc.in
+@@ -0,0 +1,11 @@
++prefix=@CMAKE_INSTALL_PREFIX@
++libdir=${prefix}/@E_SMI@/lib/
++includedir=${prefix}/@E_SMI@/include/
++
++Name: @PROJECT_NAME@
++Description: @PROJECT_DESCRIPTION@
++URL: @PROJECT_HOMEPAGE_URL@
++Version: @PKG_VERSION_STR@
++Cflags: -I"${includedir}"
++Libs:  -Wl,--as-needed  -L${libdir} -le_smi
++
+diff --git a/share/pkgconfig/e_smi64.pc.in b/share/pkgconfig/e_smi64.pc.in
+new file mode 100644
+index 0000000..169267c
+--- /dev/null
++++ b/share/pkgconfig/e_smi64.pc.in
+@@ -0,0 +1,10 @@
++prefix=@CMAKE_INSTALL_PREFIX@
++libdir=${prefix}/@E_SMI@/lib/
++includedir=${prefix}/@E_SMI@/include/
++
++Name: @PROJECT_NAME@
++Description: @PROJECT_DESCRIPTION@
++URL: @PROJECT_HOMEPAGE_URL@
++Version: @PKG_VERSION_STR@
++Requires: e_smi64-libs
++Libs.private: -L${libdir} -l:librte_smi.a 
