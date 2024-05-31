@@ -26,10 +26,10 @@ index b80bd71..7083aec 100755
  set(CPACK_PACKAGE_NAME ${E_SMI_PACKAGE})
 diff --git a/share/pkgconfig/e_smi64-libs.pc.in b/share/pkgconfig/e_smi64-libs.pc.in
 new file mode 100644
-index 0000000..1870c33
+index 0000000..f799119
 --- /dev/null
 +++ b/share/pkgconfig/e_smi64-libs.pc.in
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,10 @@
 +prefix=@CMAKE_INSTALL_PREFIX@
 +libdir=${prefix}/@E_SMI@/lib/
 +includedir=${prefix}/@E_SMI@/include/
@@ -40,10 +40,9 @@ index 0000000..1870c33
 +Version: @PKG_VERSION_STR@
 +Cflags: -I"${includedir}"
 +Libs:  -Wl,--as-needed  -L${libdir} -le_smi64
-+
 diff --git a/share/pkgconfig/e_smi64.pc.in b/share/pkgconfig/e_smi64.pc.in
 new file mode 100644
-index 0000000..c71f07b
+index 0000000..60c23c1
 --- /dev/null
 +++ b/share/pkgconfig/e_smi64.pc.in
 @@ -0,0 +1,11 @@
