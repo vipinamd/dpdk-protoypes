@@ -32,19 +32,11 @@ lcore_hello(__rte_unused void *arg)
         lcore_id = rte_lcore_id();
         printf("hello from core %u\n", lcore_id);
 
-        for (uint16_t i = 0; i < 100; i++)
+        for (uint16_t i = 0; i < 1000000; i++)
         {
-#ifdef INTELTEST
-                avxIntelReference();
-#endif
-
-#ifdef AVX2TEST
+                //avxIntelReference();
                 test256();
-#endif
-
-#ifdef AVX512TEST
-                test512();
-#endif
+                //test512();
         }
 
         return 0;
@@ -65,40 +57,14 @@ main(int argc, char **argv)
 
         if (argc == 2) {
                 int usrFreq = atoi (argv[1]);
-                freqUpDown = (usrFreq >= 0 && usrFreq < 2) ? usrFreq : 0;
+                freqUpDown = (usrFreq == 1 || usrFreq == 2) ? usrFreq : 1;
+                printf ("request from application for uncore freq %s\n", (freqUpDown == 1) ? "MAX" : "MIN");
         }
 
-        ret = rte_power_uncore_init(rte_lcore_id (), 0);
+        ret = rte_power_set_uncore_env (RTE_UNCORE_PM_ENV_AMD_HSMP);
         if (ret != 0)
                 rte_panic("failed to initialize uncore!\n");
 
-        lcore_id = 0;
-        RTE_LCORE_FOREACH_WORKER(lcore_id) {
-                switch (freqUpDown)
-                {
-                        case 1:
-                                ret = rte_power_uncore_freq_max (lcore_id, 0);
-                                if (ret < 0)
-                                        rte_panic("failed to set max uncore for lcore %u!\n", lcore_id);
-                                break;
-                        case 2:
-                                ret = rte_power_uncore_freq_min (lcore_id, 0);
-                                if (ret < 0)
-                                        rte_panic("failed to set min uncore for lcore %u!\n", lcore_id);
-                                break;
-                }
-        }
-
-        lcore_id = 0;
-                rte_panic("Cannot init EAL\n");
-
-        argc -= ret;
-        argv += ret;
-
-        if (argc == 2) {
-                int usrFreq = atoi (argv[1]);
-                freqUpDown = (usrFreq >= 0 && usrFreq < 2) ? usrFreq : 0;
-        }
 
         ret = rte_power_uncore_init(rte_lcore_id (), 0);
         if (ret != 0)
@@ -127,7 +93,13 @@ main(int argc, char **argv)
         }
 
         /* call it on main lcore too */
-        lcore_hello(NULL);
+        //lcore_hello(NULL);
+        int count =100000;
+        while (count--)
+        {
+                printf(" uncore freq: %u\n", rte_power_get_uncore_freq (rte_lcore_id(), 0));
+                rte_delay_us_block(1000);
+        }
 
         rte_eal_mp_wait_lcore();
 
